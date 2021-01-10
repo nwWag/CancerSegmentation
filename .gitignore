@@ -1,4 +1,5 @@
 datasets/
+! datasets/interface.py
 store/
 # Created by https://www.toptal.com/developers/gitignore/api/linux,macos,python,c++
 # Edit at https://www.toptal.com/developers/gitignore?templates=linux,macos,python,c++
