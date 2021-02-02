@@ -8,6 +8,7 @@ from torch.utils.data import random_split
 # Models
 from models.unet import UNet
 from models.super_unet import SuperUNet
+from models.att_unet import AttUNet
 from models.losses import FocalLoss, BinaryIOU
 
 # Data
@@ -32,12 +33,12 @@ from utils import test, draw, load
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Global Config
 device = 'cuda'
-what = 'train'
+what = 'draw'
 
 # Superviser Config
 name = 'std_u'  # Storage name
-lr = 1e-3
-epochs = 50
+lr = 1e-4
+epochs = 500
 batch_size = 32
 pretrained_path = 'store/' + name
 
@@ -51,7 +52,7 @@ train_dataset, test_dataset = random_split(HAM10000('datasets/archive/'),
                                            generator=torch.Generator().manual_seed(42))
 
 
-model = UNet().to(device)
+model = AttUNet().to(device)
 if pretrained_path is not None:
     load(model=model, name=pretrained_path)
 
@@ -67,7 +68,7 @@ if what == 'train':
     trainer.supervise(lr=lr, epochs=epochs,
                       batch_size=batch_size, name='store/' + name)
 
-elif what in ['train', 'validate']:
+if what in ['train', 'validate']:
     # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
     # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -75,10 +76,10 @@ elif what in ['train', 'validate']:
     # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     test(model, test_dataset, BinaryIOU())
 
-elif what in ['train', 'validate', 'draw']:
+if what in ['train', 'validate', 'draw']:
     # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
     # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     # Draw Example
     # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    draw(model, test_dataset[0])
+    draw(model, test_dataset[1])

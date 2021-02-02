@@ -128,7 +128,7 @@ class BaseTrainer():
             torch.FloatTensor: Loss of batch.
         """
         inputs, labels = data
-        outputs = self.model(inputs.to('cuda'))
+        outputs = self.model(inputs.to('cuda'))[0]
         loss = self.loss(outputs, labels.to('cuda'))
         return loss
 

@@ -5,6 +5,7 @@ import numpy as np
 from tqdm import tqdm
 from colorama import Fore
 from PIL import Image
+from skimage import data, color, io, img_as_float
 
 
 def test(model, test_dataset, loss_f, batch_size=48, shuffle=False, num_workers=0, collate_fn=None):
@@ -21,7 +22,7 @@ def test(model, test_dataset, loss_f, batch_size=48, shuffle=False, num_workers=
 
         inputs, labels = data
         with torch.no_grad():
-            outputs = model(inputs.to('cuda'))
+            outputs = model(inputs.to('cuda'))[0]
             loss = loss_f(outputs, labels.to('cuda'))
             loss_sum += loss.item()
         tkb.set_postfix(Accuracy='{:3f}'.format(
@@ -32,34 +33,18 @@ def test(model, test_dataset, loss_f, batch_size=48, shuffle=False, num_workers=
 def draw(model, example, path_to_store='example/'):
     example_img, example_label_raw = example[0], example[1]
     example_label = (example_label_raw == 0.0).squeeze(0).to('cuda')
-
-    outputs = model(example_img.unsqueeze(0).to('cuda'))
+    with torch.no_grad():
+        outputs, scores = model(example_img.unsqueeze(0).to('cuda'))
     predicted = (torch.argmax(outputs, dim=1) == 0.0).squeeze(0)
-    addition = (torch.argmax(outputs, dim=1) -
-                example_label_raw.to(outputs.device) == 1.0).squeeze(0)
-    less = (torch.argmax(outputs, dim=1) -
-            example_label_raw.to(outputs.device) == -1.0).squeeze(0)
-
     gray_img = (example_img[0] * 0.2125 +
                 example_img[1] * 0.7154 + example_img[2] * 0.0721).repeat(3, 1, 1).permute(1, 2, 0)
 
-    rg_img = (example_img[0] * 0.2125 +
-              example_img[1] * 0.7154).repeat(3, 1, 1).permute(1, 2, 0)
-
-    gb_img = (example_img[1] * 0.7154 + example_img[2]
-              * 0.0721).repeat(3, 1, 1).permute(1, 2, 0)
-
-    example_img_p = example_img.permute(1, 2, 0)
+    example_img_p = example_img.clone().permute(1, 2, 0)
     example_img_o = example_img_p.clone()
+    example_img_a = torch.cat((scores[0].repeat(2,1,1), torch.zeros_like(scores[0])), dim=0).permute(1,2,0) * 255.0
 
     example_img_p[predicted] = gray_img[predicted]
-
     example_img_o[example_label] = gray_img[example_label]
-
-    example_img_b = example_img.permute(
-        1, 2, 0).clone()  # example_img_p.clone()
-    example_img_b[addition] = rg_img[addition]
-    #example_img_b[less] = gb_img[less]
 
     im = Image.fromarray(example_img_o.cpu().numpy().astype(np.uint8))
     im.save(path_to_store + 'org.png')
@@ -67,8 +52,15 @@ def draw(model, example, path_to_store='example/'):
     im = Image.fromarray(example_img_p.cpu().numpy().astype(np.uint8))
     im.save(path_to_store + 'pred.png')
 
-    im = Image.fromarray(example_img_b.cpu().numpy().astype(np.uint8))
-    im.save(path_to_store + 'overlayed.png')
+
+    im_clean = Image.fromarray(example_img.permute(1,2,0).cpu().numpy().astype(np.uint8)).convert('LA').convert('RGBA')
+    im_a = Image.fromarray(example_img_a.cpu().numpy().astype(np.uint8)).convert('RGBA')
+    im_mask = Image.new('RGBA',im_clean.size,(0,0,0,100))
+    im = Image.composite(im_clean, im_a, im_mask).convert('RGB')
+    #im = Image.fromarray(img_masked)
+    im.save(path_to_store + 'att.png')
+
+    print("Written to", path_to_store)
 
 
 def load(model, name="store/base"):
