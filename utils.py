@@ -69,7 +69,10 @@ def load(model, name="store/base"):
     Args:
         name (str, optional): Path to storage. Defaults to "store/base".
     """
-    pretrained_dict = torch.load(name + ".pt")
+    if torch.cuda.is_available():
+        pretrained_dict = torch.load(name + ".pt")
+    else:
+        pretrained_dict = torch.load(name + ".pt", map_location=torch.device('cpu'))
     print("Loaded", name + " model.")
     model_dict = model.state_dict()
     model_dict.update(pretrained_dict)

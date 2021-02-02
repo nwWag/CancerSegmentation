@@ -2,10 +2,21 @@ import tkinter as tk
 from tkinter import filedialog
 from PIL import Image, ImageTk, ImageDraw
 import os
-
-
+from models.att_unet import AttUNet
+from utils import load
+import numpy as np
+import torch
+from torchvision.transforms import Resize
 class GUI:
     def __init__(self):
+        # Load model
+        pretrained_path = 'store/' + 'std_u'
+        self.model = AttUNet()
+        print("Created Model")
+        load(model=self.model, name=pretrained_path)
+        # Define image res
+        self.resolution_change = Resize((225,225))
+
         # super().__init__()
         self.root = tk.Tk()
         # Initial Window Size and Position
@@ -61,8 +72,10 @@ class GUI:
                 self.show_image()
 
     def draw_toolbar(self):
+        dd_select_image = tk.Menu(self.toolbar, tearoff=0)
+        self.toolbar.add_cascade(label="Load Image", menu=dd_select_image)
+        dd_select_image.add_command(label="Browse", command=lambda: self.load_image_handle())
 
-        self.toolbar.add_command(label="Load Image", command=self.load_image_handle)
         dd_select_model = tk.Menu(self.toolbar, tearoff=0)
         self.toolbar.add_cascade(label="Select Model", menu=dd_select_model)
         dd_select_model.add_command(label="Baseline", command=lambda: self.select_model_handle("Baseline"))
@@ -74,10 +87,11 @@ class GUI:
         # dd_select_params.add_command(label="Default(Attention)", command=lambda: self.select_param_handle("Attention"))
         # dd_select_params.add_command(label="Import", command=lambda: self.select_param_handle("Import"))
 
-        self.toolbar.add_command(label="Draw", command=lambda: self.mouse_mode_handle("draw"), state='disabled')
-        self.toolbar.add_command(label="Erase", command=lambda: self.mouse_mode_handle("erase"), state='disabled')
-
-        self.toolbar.add_command(label="Pen Size", command=self.pen_size_handle)
+        dd_draw = tk.Menu(self.toolbar, tearoff=0)
+        self.toolbar.add_cascade(label="Refine", menu=dd_draw)
+        dd_draw.add_command(label="Redraw", command=lambda: self.mouse_mode_handle("draw"))
+        dd_draw.add_command(label="Erase", command=lambda: self.mouse_mode_handle("erase"))
+        dd_draw.add_command(label="Pen Size", command=lambda: self.pen_size_handle())
 
         # self.toolbar.entryconfigure("Draw", state='active')
 
@@ -100,11 +114,13 @@ class GUI:
                                           filetypes=(("jpeg files", "*.jpg"), ("png files", ".png")))
         # self.file_im
         self.file_im = os.path.relpath(file)
-        # TODO: call inference
-        self.seg_mask = Image.new('L', (800, 800), color=128)
-        self.toolbar.entryconfigure("Draw", state='normal')
-        self.toolbar.entryconfigure("Erase", state='normal')
-
+        torch_image = torch.unsqueeze(torch.from_numpy(np.array(Image.open(self.file_im))).permute(2, 0, 1), dim=0)
+        resized_image = self.resolution_change(torch_image).float()
+        mask, att = self.model(resized_image)
+        mask = mask.squeeze().permute(1,2,0)
+        mask = ((torch.argmax(mask, dim=2))) * 128
+        self.seg_mask = Image.fromarray(mask.cpu().numpy().astype(np.uint8))
+        self.att_mask = Image.fromarray(torch.squeeze(att * 255).cpu().numpy().astype(np.uint8))
         self.show_image()
 
     def select_model_handle(self, selected):
@@ -136,11 +152,11 @@ class GUI:
     def draw_erase(self, event):
         if self.mouse_mode != 'select':
             self.draw_counter += 1
-            paint_color = 128
+            paint_color = 80
             draw = ImageDraw.Draw(self.seg_mask)
 
             if self.mouse_mode == "erase":
-                paint_color = 255
+                paint_color = 0
 
             draw.ellipse((int(event.x - self.pen_size / 2), int(event.y - self.pen_size / 2),
                           int(event.x + self.pen_size / 2), int(event.y + self.pen_size / 2)), fill=paint_color,
@@ -162,10 +178,12 @@ class GUI:
         self.canvas.update()
         im_dim = (self.canvas.winfo_width(), self.canvas.winfo_height())
         image = image.resize(im_dim)
-        self.seg_mask = self.seg_mask.resize(im_dim, resample=0)
-        colormap = Image.new('RGB', im_dim, color=(255, 50, 50))
+        #self.seg_mask = self.seg_mask.resize(im_dim, resample=0).convert('RGBA')
+        self.seg_mask = self.att_mask.resize(im_dim, resample=0).convert('RGBA')
 
-        image = Image.composite(image, colormap, self.seg_mask)
+        im_clean = image.convert('RGBA')
+        im_mask = Image.new('RGBA',im_clean.size,(0,0,0,100))
+        image = Image.composite(im_clean, self.seg_mask, im_mask).convert('RGB')
         tkimage = ImageTk.PhotoImage(image)
         self.prev = tk.Label(self.canvas, image=tkimage)
         self.prev.image = tkimage

@@ -168,7 +168,10 @@ class RandSelfAttention2D(nn.Module):
 
         def forward(self, input):
                 b_size, in_channels, height, width = input.size()
-                output = zeros((b_size, self.value_dim, height, width)).cuda()
+                if torch.cuda.is_available():
+                    output = zeros((b_size, self.value_dim, height, width)).cuda()
+                else:
+                    output = zeros((b_size, self.value_dim, height, width))
                 scores_out = []
                 for i, x in enumerate(input):
                         output[i], score_out = self.forward_single(x)
@@ -230,7 +233,10 @@ class SelfAttention2D(nn.Module):
 
         def forward(self, input):
                 b_size, in_channels, height, width = input.size()
-                output = zeros((b_size, self.value_dim, height, width)).cuda()
+                if torch.cuda.is_available():
+                    output = zeros((b_size, self.value_dim, height, width)).cuda()
+                else:
+                    output = zeros((b_size, self.value_dim, height, width))
                 scores_out = []
                 for i, x in enumerate(input):
                         output[i], score_out = self.forward_single(x)
